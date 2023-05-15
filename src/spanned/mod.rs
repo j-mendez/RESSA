@@ -223,17 +223,11 @@ pub struct Parser<'a, CH> {
     /// `ress` crate for more details)
     scanner: Scanner<'a>,
     /// The next item,
-    look_ahead: Item<&'a str>,
+    look_ahead: Box<Item<&'a str>>,
     /// Since we are looking ahead, we need
     /// to make sure we don't miss the eof
     /// by using this flag
     found_eof: bool,
-    /// a possible container for tokens, currently
-    /// it is unused
-    _tokens: Vec<Item<&'a str>>,
-    /// a possible container for comments, currently
-    /// it is unused
-    _comments: Vec<Item<&'a str>>,
     /// The current position we are parsing
     current_position: Position,
     look_ahead_position: Position,
@@ -310,12 +304,10 @@ where
         };
         let mut ret = Self {
             scanner,
-            look_ahead,
+            look_ahead: Box::new(look_ahead),
             found_eof: false,
             config,
             context,
-            _tokens: Vec::new(),
-            _comments: Vec::new(),
             current_position: Position { line: 1, column: 0 },
             look_ahead_position: Position { line: 1, column: 0 },
             _look_ahead: String::new(),
@@ -4175,7 +4167,7 @@ where
                 {
                     if self.at_punct(Punct::Equal) {
                         self.context.first_covert_initialized_name_error =
-                            Some(self.look_ahead.clone());
+                            Some(*self.look_ahead.clone());
                         let operator = AssignOp::Equal(self.expect_punct(Punct::Equal)?);
                         let inner = isolate_cover_grammar!(self, parse_assignment_expr)?;
                         let value = if let Token::Ident(_) = &start.token {
@@ -4669,7 +4661,7 @@ where
                 return self.expected_token_error(&self.look_ahead, &["identifier"]);
             }
             let restricted = ident.slice.source == "eval" || ident.slice.source == "arguments";
-            params.push(self.look_ahead.clone());
+            params.push(*self.look_ahead.clone());
             Ok((restricted, Pat::Ident(ident)))
         }
     }
@@ -5589,7 +5581,7 @@ where
                         }));
                     }
                 }
-                ops.push(self.next_item()?);
+                ops.push(Box::new(self.next_item()?));
                 precs.push(prec);
                 let exp = isolate_cover_grammar!(self, parse_exponentiation_expression)?;
                 stack.push(exp);
@@ -6373,8 +6365,8 @@ where
                     continue;
                 }
                 self.current_position = self.look_ahead_position;
-                let ret = replace(&mut self.look_ahead, look_ahead);
-                return Ok(ret);
+
+                return Ok(replace(&mut self.look_ahead, look_ahead));
             } else {
                 // if the next item is None, the iterator is spent
                 // if the last token was EOF then we want to return that
@@ -6385,7 +6377,7 @@ where
                         return Err(Error::ParseAfterEoF);
                     } else {
                         self.found_eof = true;
-                        return Ok(self.look_ahead.clone());
+                        return Ok(*self.look_ahead.clone());
                     }
                 } else {
                     return Err(Error::UnexpectedEoF);
