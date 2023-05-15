@@ -1,5 +1,5 @@
 [package]
-name = "ressa"
+name = "ressa_r"
 version = "0.8.2"
 authors = ["Robert Masen <r.f.masen@gmail.com>"]
 repository = "https://github.com/rusty-ecma/RESSA"
