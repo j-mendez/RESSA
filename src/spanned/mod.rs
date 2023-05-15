@@ -216,12 +216,12 @@ impl<'b> Builder<'b> {
 /// the two `enum` variants.
 pub struct Parser<'a, CH> {
     /// The current parsing context
-    context: Context<'a>,
+    context: Box<Context<'a>>,
     /// The configuration provided by the user
-    config: Config,
+    config: Box<Config>,
     /// The internal scanner (see the
     /// `ress` crate for more details)
-    scanner: Scanner<'a>,
+    scanner: Box<Scanner<'a>>,
     /// The next item,
     look_ahead: Box<Item<&'a str>>,
     /// Since we are looking ahead, we need
@@ -229,14 +229,9 @@ pub struct Parser<'a, CH> {
     /// by using this flag
     found_eof: bool,
     /// The current position we are parsing
-    current_position: Position,
-    look_ahead_position: Position,
-    /// To ease debugging this will be a String representation
-    /// of the look_ahead token, it will be an empty string
-    /// unless you are using the `debug_look_ahead` feature
-    _look_ahead: String,
-
-    pub comment_handler: CH,
+    current_position: Box<Position>,
+    look_ahead_position: Box<Position>,
+    pub comment_handler: Box<CH>,
     original: &'a str,
 }
 /// The start/end index of a line
@@ -303,15 +298,14 @@ where
             location: SourceLocation::new(Position::new(0, 0), Position::new(0, 0)),
         };
         let mut ret = Self {
-            scanner,
+            scanner: Box::new(scanner),
             look_ahead: Box::new(look_ahead),
             found_eof: false,
-            config,
-            context,
-            current_position: Position { line: 1, column: 0 },
-            look_ahead_position: Position { line: 1, column: 0 },
-            _look_ahead: String::new(),
-            comment_handler,
+            config: Box::new(config),
+            context: Box::new(context),
+            current_position:Box::new( Position { line: 1, column: 0 }),
+            look_ahead_position: Box::new( Position { line: 1, column: 0 } ),
+            comment_handler: Box::new(comment_handler),
             original,
         };
         let _ = ret.next_item()?;
@@ -449,7 +443,7 @@ where
                     } else {
                         if !self.context.is_module {
                             return Err(Error::UseOfModuleFeatureOutsideOfModule(
-                                self.current_position,
+                                *self.current_position,
                                 "es6 import syntax".to_string(),
                             ));
                         }
@@ -534,7 +528,7 @@ where
     fn parse_import_decl(&mut self) -> Res<(ModImport<'b>, Option<Slice<'b>>)> {
         if let Some(scope) = self.context.lexical_names.last_scope() {
             if !scope.is_top() {
-                return Err(Error::InvalidImportError(self.current_position));
+                return Err(Error::InvalidImportError(*self.current_position));
             }
         }
         let keyword_import = self.expect_keyword(Keyword::Import(()))?;
@@ -566,7 +560,7 @@ where
             } else if self.at_punct(Punct::Asterisk) {
                 if found_asterisk {
                     return Err(Error::UnexpectedToken(
-                        self.look_ahead_position,
+                        *self.look_ahead_position,
                         "`*` can only appear once in import statement".to_string(),
                     ));
                 }
@@ -636,7 +630,7 @@ where
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn parse_import_specifier(&mut self) -> Res<NormalImportSpec<'b>> {
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let imported = self.parse_ident_name()?;
         let alias = if self.at_contextual_keyword("as") {
             let keyword = self.next_item()?;
@@ -676,7 +670,7 @@ where
         }
         let keyword_as = self.next_item()?;
         let keyword = self.get_slice(&keyword_as)?;
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let ident = self.parse_ident_name()?;
         self.context.lexical_names.declare(
             ident.slice.source.clone(),
@@ -692,7 +686,7 @@ where
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn parse_import_default_specifier(&mut self) -> Res<DefaultImportSpec<'b>> {
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let id = self.parse_ident_name()?;
         self.context
             .lexical_names
@@ -702,17 +696,17 @@ where
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn parse_export_decl(&mut self) -> Res<(ModExport<'b>, Option<Slice<'b>>)> {
-        log::debug!("{} parse_export_decl", self.look_ahead_position);
+        log::debug!("{} parse_export_decl", *self.look_ahead_position);
         let mut semi = None;
         if let Some(scope) = self.context.lexical_names.last_scope() {
             log::trace!("scope: {:?}", self.context.lexical_names.states);
             if !scope.is_top() {
-                return Err(Error::InvalidExportError(self.current_position));
+                return Err(Error::InvalidExportError(*self.current_position));
             }
         }
         if !self.context.is_module {
             return Err(Error::UseOfModuleFeatureOutsideOfModule(
-                self.current_position,
+                *self.current_position,
                 "export syntax".to_string(),
             ));
         }
@@ -728,7 +722,7 @@ where
             if self.look_ahead.token.matches_keyword(Keyword::Let(()))
                 || self.look_ahead.token.matches_keyword(Keyword::Const(()))
             {
-                let _start = self.look_ahead_position;
+                let _start = *self.look_ahead_position;
                 let mut lex = self.parse_lexical_decl(false)?;
                 if let Decl::Var { semi_colon, .. } = &mut lex {
                     semi = semi_colon.take();
@@ -738,7 +732,7 @@ where
                 ModExport { keyword, spec }
             } else if self.look_ahead.token.matches_keyword(Keyword::Var(())) {
                 let keyword_var = self.expect_keyword(Keyword::Var(()))?;
-                let _start = self.look_ahead_position;
+                let _start = *self.look_ahead_position;
                 let decls = self.parse_variable_decl_list(false)?;
                 let decls = VarDecls {
                     keyword: VarKind::Var(Some(keyword_var)),
@@ -765,7 +759,7 @@ where
                 );
             }
         } else if self.at_async_function() {
-            let _start = self.look_ahead_position;
+            let _start = *self.look_ahead_position;
             let func = self.parse_function_decl(false)?;
             let decl = Decl::Func(func);
             let decl = NamedExportDecl::Decl(decl);
@@ -778,7 +772,7 @@ where
             while !self.at_punct(Punct::CloseBrace) {
                 let is_default = self.at_keyword(Keyword::Default(()));
                 found_default = found_default || is_default;
-                let start = self.look_ahead_position;
+                let start = *self.look_ahead_position;
                 let spec = self.parse_export_specifier()?;
                 if is_default {
                     self.context
@@ -867,7 +861,7 @@ where
         } else {
             if self.at_contextual_keyword("from") {
                 return Err(Error::InvalidUseOfContextualKeyword(
-                    self.current_position,
+                    *self.current_position,
                     "from".to_string(),
                 ));
             }
@@ -899,7 +893,7 @@ where
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn parse_export_decl_func(&mut self) -> Res<Decl<'b>> {
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let func = self.parse_function_decl(true)?;
         if let Some(id) = &func.id {
             self.context
@@ -911,7 +905,7 @@ where
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn parse_export_decl_class(&mut self) -> Res<Decl<'b>> {
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let class = self.parse_class_decl(true, true)?;
         if let Some(id) = &class.id {
             self.context
@@ -924,12 +918,12 @@ where
     #[tracing::instrument(level = "trace", skip(self))]
     fn parse_async_export(&mut self) -> Res<DefaultExportDeclValue<'b>> {
         let exp = if self.at_async_function() {
-            let _start = self.look_ahead_position;
+            let _start = *self.look_ahead_position;
             let func = self.parse_function_decl(true)?;
             let decl = Decl::Func(func);
             DefaultExportDeclValue::Decl(decl)
         } else {
-            let _start = self.look_ahead_position;
+            let _start = *self.look_ahead_position;
             let expr = self.parse_assignment_expr()?;
             self.consume_semicolon()?;
             DefaultExportDeclValue::Expr(expr)
@@ -1030,7 +1024,7 @@ where
                 }
                 Keyword::Continue(_k) => {
                     if !self.context.in_iteration {
-                        return Err(Error::ContinueOutsideOfIteration(self.look_ahead_position));
+                        return Err(Error::ContinueOutsideOfIteration(*self.look_ahead_position));
                     }
                     let (keyword, label, semi_colon) = self.parse_continue_stmt()?;
                     Stmt::Continue {
@@ -1116,7 +1110,7 @@ where
         );
         if self.context.strict {
             self.tolerate_error(Error::NonStrictFeatureInStrictContext(
-                self.current_position,
+                *self.current_position,
                 "with statements".to_string(),
             ))?;
         }
@@ -1136,7 +1130,7 @@ where
             }
         } else {
             let close_paren = self.expect_punct(Punct::CloseParen)?;
-            let body_start = self.look_ahead_position;
+            let body_start = *self.look_ahead_position;
             let body = self.parse_statement(Some(StmtCtx::With))?;
             if Self::is_func_decl(&body) || Self::is_labeled_func(&body) {
                 return Err(Error::InvalidFuncPosition(
@@ -1165,7 +1159,7 @@ where
         let keyword = self.expect_keyword(Keyword::While(()))?;
         let open_paren = self.expect_punct(Punct::OpenParen)?;
         let test = self.parse_expression()?;
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         if !self.at_punct(Punct::CloseParen) {
             return self.expected_token_error(&self.look_ahead, &[")"]);
         }
@@ -1220,7 +1214,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let first = self.parse_var_decl(in_for)?;
         self.declare_pat(
             &first.id,
@@ -1234,7 +1228,7 @@ where
             if let Some(last) = ret.last_mut() {
                 last.comma = Some(comma);
             }
-            let start = self.look_ahead_position;
+            let start = *self.look_ahead_position;
             let next = self.parse_var_decl(in_for)?;
             self.declare_pat(
                 &next.id,
@@ -1262,7 +1256,7 @@ where
                 ),
             };
             return Err(Error::NonStrictFeatureInStrictContext(
-                self.current_position,
+                *self.current_position,
                 format!("{:?} as an identifier", patt),
             ));
         }
@@ -1314,7 +1308,7 @@ where
             None
         };
         if handler.is_none() && finalizer.is_none() {
-            return Err(Error::TryWithNoCatchOrFinally(self.current_position));
+            return Err(Error::TryWithNoCatchOrFinally(*self.current_position));
         }
         Ok(TryStmt {
             keyword,
@@ -1332,17 +1326,17 @@ where
             self.look_ahead.token
         );
         let keyword = self.expect_keyword(Keyword::Catch(()))?;
-        let mut param_pos = self.look_ahead_position;
+        let mut param_pos = *self.look_ahead_position;
         let param = if self.at_punct(Punct::OpenParen) {
             let open_paren = self.expect_punct(Punct::OpenParen)?;
             if self.at_punct(Punct::CloseParen) {
-                return Err(Error::InvalidCatchArg(self.current_position));
+                return Err(Error::InvalidCatchArg(*self.current_position));
             }
-            param_pos = self.look_ahead_position;
+            param_pos = *self.look_ahead_position;
             let mut params = Vec::new();
             let (_, param) = self.parse_pattern(false, &mut params)?;
             if self.context.strict && Self::is_restricted(&param) {
-                return Err(Error::StrictModeArgumentsOrEval(self.current_position));
+                return Err(Error::StrictModeArgumentsOrEval(*self.current_position));
             }
             match param {
                 Pat::Array(_) | Pat::Obj(_) => {
@@ -1354,7 +1348,7 @@ where
                 _ => (),
             }
             if !self.at_punct(Punct::CloseParen) {
-                return Err(Error::InvalidCatchArg(self.current_position));
+                return Err(Error::InvalidCatchArg(*self.current_position));
             }
             let close_paren = self.expect_punct(Punct::CloseParen)?;
             let catch_arg = CatchArg {
@@ -1413,7 +1407,7 @@ where
         );
         let keyword = self.expect_keyword(Keyword::Throw(()))?;
         if self.context.has_line_term || self.at_punct(Punct::SemiColon) {
-            return Err(Error::ThrowWithNoArg(self.current_position));
+            return Err(Error::ThrowWithNoArg(*self.current_position));
         }
         let arg = self.parse_expression()?;
         let semi_colon = self.consume_semicolon()?;
@@ -1542,7 +1536,7 @@ where
             }
         }
         let close_paren = self.expect_punct(Punct::CloseParen)?;
-        let body_start = self.look_ahead_position;
+        let body_start = *self.look_ahead_position;
         let consequent = self.parse_if_clause()?;
         if Self::is_labeled_func(&consequent) {
             return Err(Error::InvalidFuncPosition(
@@ -1629,7 +1623,7 @@ where
             self.remove_scope();
             return Ok(Stmt::For(stmt));
         }
-        let init_start = self.look_ahead_position;
+        let init_start = *self.look_ahead_position;
         let ret = if self.at_keyword(Keyword::Var(())) {
             let slice = self.expect_keyword(Keyword::Var(()))?;
             let kind = VarKind::Var(Some(slice));
@@ -1709,7 +1703,7 @@ where
                 };
                 let left = LoopLeft::Expr(Expr::Ident(Ident { slice: k }));
                 let right = self.parse_expression()?;
-                let body_start = self.look_ahead_position;
+                let body_start = *self.look_ahead_position;
                 let close_paren = self.expect_punct(Punct::CloseParen)?;
                 let body = self.parse_loop_body()?;
                 if Self::is_labeled_func(&body) {
@@ -1745,7 +1739,7 @@ where
                         let keyword_in = self.expect_keyword(Keyword::In(()))?;
                         let right = self.parse_expression()?;
                         let close_paren = self.expect_punct(Punct::CloseParen)?;
-                        let body_start = self.look_ahead_position;
+                        let body_start = *self.look_ahead_position;
                         let body = self.parse_loop_body()?;
                         if Self::is_labeled_func(&body) || Self::is_labeled_func(&body) {
                             Err(Error::InvalidFuncPosition(
@@ -1792,7 +1786,7 @@ where
                 let keyword_in = self.expect_keyword(Keyword::In(()))?;
                 if let Expr::Assign(_) = init {
                     return Err(Error::ForOfInAssign(
-                        self.look_ahead_position,
+                        *self.look_ahead_position,
                         "For in loop left hand side cannot contain an assignment".to_string(),
                     ));
                 }
@@ -1802,7 +1796,7 @@ where
                 lhs::check_loop_head_expr(&init, init_start)?;
                 let left = LoopLeft::Expr(init);
                 let right = self.parse_expression()?;
-                let body_start = self.look_ahead_position;
+                let body_start = *self.look_ahead_position;
                 let close_paren = self.expect_punct(Punct::CloseParen)?;
                 let body = self.parse_loop_body()?;
                 if Self::is_labeled_func(&body) {
@@ -1830,7 +1824,7 @@ where
                 let left = LoopLeft::Expr(init);
                 let right = self.parse_assignment_expr()?;
                 let close_paren = self.expect_punct(Punct::CloseParen)?;
-                let body_start = self.look_ahead_position;
+                let body_start = *self.look_ahead_position;
                 let body = self.parse_loop_body()?;
                 if Self::is_labeled_func(&body) {
                     Err(Error::InvalidFuncPosition(
@@ -1918,7 +1912,7 @@ where
         } else {
             Some(self.parse_expression()?)
         };
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         let close_paren = self.expect_punct(Punct::CloseParen)?;
         let body = self.parse_loop_body()?;
         if Self::is_func_decl(&body) || Self::is_labeled_func(&body) {
@@ -1959,14 +1953,14 @@ where
         {
             if !kind.is_var() || self.context.strict {
                 return Err(Error::ForOfInAssign(
-                    self.look_ahead_position,
+                    *self.look_ahead_position,
                     "For in loop left hand side cannot contain an assignment".to_string(),
                 ));
             }
             match id {
                 Pat::Obj(_) | Pat::Array(_) => {
                     return Err(Error::ForOfInAssign(
-                        self.look_ahead_position,
+                        *self.look_ahead_position,
                         "For in loop left hand side cannot contain a destructuring assignment"
                             .to_string(),
                     ))
@@ -1976,7 +1970,7 @@ where
         }
         let keyword_in = self.expect_keyword(Keyword::In(()))?;
         let right = self.parse_expression()?;
-        let body_start = self.look_ahead_position;
+        let body_start = *self.look_ahead_position;
         let close_paren = self.expect_punct(Punct::CloseParen)?;
         let body = self.parse_loop_body()?;
         if Self::is_func_decl(&body) || Self::is_labeled_func(&body) {
@@ -2012,7 +2006,7 @@ where
         );
         if let LoopLeft::Variable(_, VarDecl { init: Some(_), .. }) = left {
             return Err(Error::ForOfInAssign(
-                self.look_ahead_position,
+                *self.look_ahead_position,
                 "For of loop left hand side cannot contain an assignment".to_string(),
             ));
         }
@@ -2020,7 +2014,7 @@ where
         let keyword_of = self.get_slice(&keyword_of)?;
         let right = self.parse_assignment_expr()?;
         let close_paren = self.expect_punct(Punct::CloseParen)?;
-        let body_start = self.look_ahead_position;
+        let body_start = *self.look_ahead_position;
         let body = self.parse_loop_body()?;
         if Self::is_func_decl(&body) || Self::is_labeled_func(&body) {
             Err(Error::InvalidFuncPosition(
@@ -2063,7 +2057,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         let keyword_do = self.expect_keyword(Keyword::Do(()))?;
         let prev_iter = self.context.in_iteration;
         self.context.in_iteration = true;
@@ -2121,7 +2115,7 @@ where
             self.look_ahead.span.start
         );
         let keyword = self.expect_keyword(k)?;
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let label = if self.look_ahead.token.is_ident() && !self.context.has_line_term {
             let id = self.parse_var_ident(false)?;
             if let Some(label_kind) = self.context.label_set.get(&*id.slice.source) {
@@ -2133,7 +2127,7 @@ where
                 }
             } else {
                 return Err(Error::UnknownOptionalLabel(
-                    self.current_position,
+                    *self.current_position,
                     k,
                     id.slice.source.to_string(),
                 ));
@@ -2148,7 +2142,7 @@ where
             && !self.context.in_iteration
             && !self.context.in_switch
         {
-            return Err(Error::InvalidOptionalLabel(self.current_position));
+            return Err(Error::InvalidOptionalLabel(*self.current_position));
         }
         Ok((keyword, label, semi_colon))
     }
@@ -2172,13 +2166,13 @@ where
     fn parse_labelled_statement(&mut self) -> Res<Stmt<'b>> {
         log::debug!("parse_labelled_statement, {:?}", self.look_ahead.token);
         let start = self.look_ahead.span;
-        let pos = self.look_ahead_position;
+        let pos = *self.look_ahead_position;
         let expr = self.parse_expression()?;
 
         let expr = if let Expr::Ident(ident) = expr {
             if self.context.strict && Self::is_strict_reserved(&ident) {
                 return Err(Error::NonStrictFeatureInStrictContext(
-                    self.current_position,
+                    *self.current_position,
                     "strict reserved word as identifier".to_string(),
                 ));
             }
@@ -2259,7 +2253,7 @@ where
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn expr_stmt_guard(&mut self) -> Res<()> {
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         match &self.look_ahead.token {
             Token::Keyword(Keyword::Let(_)) => {
                 if let Some(peek) = self.scanner.look_ahead() {
@@ -2344,10 +2338,10 @@ where
             if let ProgramPart::Decl(ref decl) = part {
                 match decl {
                     Decl::Export { .. } => {
-                        return Err(Error::InvalidExportError(self.current_position))
+                        return Err(Error::InvalidExportError(*self.current_position))
                     }
                     Decl::Import { .. } => {
-                        return Err(Error::InvalidImportError(self.current_position))
+                        return Err(Error::InvalidImportError(*self.current_position))
                     }
                     _ => (),
                 }
@@ -2404,7 +2398,7 @@ where
         } else {
             lexical_names::DeclKind::Lex(self.context.is_module)
         };
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         let first = self.parse_lexical_binding(kind, in_for)?;
         self.declare_pat(&first.id, k, start_pos)?;
         let mut ret = vec![ListEntry::no_comma(first)];
@@ -2414,7 +2408,7 @@ where
             if let Some(last) = ret.last_mut() {
                 last.comma = Some(comma);
             }
-            let start_pos = self.look_ahead_position;
+            let start_pos = *self.look_ahead_position;
             let next = self.parse_lexical_binding(kind, in_for)?;
 
             self.declare_pat(&next.id, k, start_pos)?;
@@ -2498,7 +2492,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         let keyword_async = if self.at_contextual_keyword("async") {
             let keyword_async = self.next_item()?;
             self.slice_from(&keyword_async)
@@ -2540,7 +2534,7 @@ where
         self.context.allow_yield = star.is_none();
         log::debug!("setting allow_super to {}", false);
         self.context.set_allow_super(false);
-        let param_start = self.look_ahead_position;
+        let param_start = *self.look_ahead_position;
         self.add_scope(lexical_names::Scope::FuncTop);
         let formal_params = self.parse_formal_params()?;
         if self.context.strict {
@@ -2620,13 +2614,13 @@ where
             None
         };
         let mut id_is_restricted = false;
-        let id_start = self.look_ahead_position;
+        let id_start = *self.look_ahead_position;
         let id = if is_stmt {
             if opt_id && !self.look_ahead.token.is_ident() {
                 None
             } else {
                 id_is_restricted = self.look_ahead.token.is_restricted();
-                let start = self.look_ahead_position;
+                let start = *self.look_ahead_position;
                 if self.context.strict && id_is_restricted {
                     return Err(Error::RestrictedIdent(start));
                 }
@@ -2674,7 +2668,7 @@ where
         self.context.allow_await = keyword_async.is_none();
         self.context.allow_yield = star.is_none();
         self.context.set_allow_super(false);
-        let param_start = self.look_ahead_position;
+        let param_start = *self.look_ahead_position;
         self.add_scope(lexical_names::Scope::FuncTop);
         let params = self.parse_func_params()?;
         log::debug!(
@@ -2743,7 +2737,7 @@ where
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn parse_func_params(&mut self) -> Res<FormalParams<'b>> {
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let formal_params = self.parse_formal_params()?;
         if self.context.strict {
             if formal_params.found_restricted {
@@ -2804,7 +2798,7 @@ where
         let prev_oct = self.context.found_directive_octal_escape;
         self.context.strict = true;
         let keyword = self.expect_keyword(Keyword::Class(()))?;
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let mut super_class = if self.at_keyword(Keyword::Extends(())) {
             let keyword_extends = self.expect_keyword(Keyword::Extends(()))?;
 
@@ -2897,7 +2891,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let keyword_static = if self.at_contextual_keyword("static") {
             let keyword_static = self.next_item()?;
             if self.at_punct(Punct::OpenParen) {
@@ -3138,7 +3132,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let prev_yield = self.context.allow_yield;
         let prev_await = self.context.allow_await;
         let prev_strict = self.context.allow_strict_directive;
@@ -3234,7 +3228,7 @@ where
             "{}: parse_property_method_async_fn",
             self.look_ahead.span.start
         );
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let prev_yield = self.context.allow_yield;
         let prev_await = self.context.allow_await;
         self.context.allow_yield = false;
@@ -3269,7 +3263,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let prev_yield = self.context.allow_yield;
         let prev_strict = self.context.allow_strict_directive;
         self.context.allow_yield = !self.context.strict;
@@ -3309,9 +3303,9 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let prev_yield = self.context.allow_yield;
-        let start_position = self.look_ahead_position;
+        let start_position = *self.look_ahead_position;
         self.add_scope(lexical_names::Scope::FuncTop);
         let formal_params = self.parse_formal_params()?;
         if formal_params::have_duplicates(&formal_params.params) {
@@ -3372,7 +3366,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let prev_allow = self.context.allow_yield;
         self.context.allow_yield = true;
         self.add_scope(lexical_names::Scope::FuncTop);
@@ -3431,7 +3425,7 @@ where
         let prev_oct = self.context.found_directive_octal_escape;
         let prev_allow = self.context.allow_strict_directive;
         self.context.allow_strict_directive = simple;
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         let ret = isolate_cover_grammar!(self, parse_function_source_el)?;
         if self.context.strict && found_restricted {
             self.tolerate_error(Error::NonStrictFeatureInStrictContext(
@@ -3594,7 +3588,7 @@ where
         );
         if self.context.strict && self.look_ahead.token.is_strict_reserved() {
             return Err(Error::NonStrictFeatureInStrictContext(
-                self.look_ahead_position,
+                *self.look_ahead_position,
                 "strict mode reserved word as an identifer".to_string(),
             ));
         }
@@ -3947,7 +3941,7 @@ where
         if let Expr::Ident(ref ident) = expr {
             if Self::is_strict_reserved(ident) {
                 Err(Error::NonStrictFeatureInStrictContext(
-                    self.current_position,
+                    *self.current_position,
                     "strict reserved word as an identifier".to_string(),
                 ))
             } else {
@@ -4018,7 +4012,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         let open_brace = self.expect_punct(Punct::OpenBrace)?;
         let mut props = Vec::new();
         let mut proto_ct = 0;
@@ -4319,7 +4313,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         let is_async = self.at_contextual_keyword("async");
         let keyword_async = if self.at_contextual_keyword("async") {
             let keyword = self.next_item()?;
@@ -4345,7 +4339,7 @@ where
         let mut found_restricted = false;
         self.add_scope(lexical_names::Scope::FuncTop);
         let id = if !self.at_punct(Punct::OpenParen) {
-            let id_pos = self.look_ahead_position;
+            let id_pos = *self.look_ahead_position;
             let item = self.look_ahead.clone();
             let id = self.parse_fn_name(is_gen)?;
             self.context.lexical_names.declare(
@@ -4565,7 +4559,7 @@ where
             self.look_ahead.span.start,
             self.look_ahead.token
         );
-        let start = self.look_ahead_position;
+        let start = *self.look_ahead_position;
         let mut params: Vec<Item<&'b str>> = Vec::new();
         let (found_restricted, param) = if self.at_punct(Punct::Ellipsis) {
             let (r, arg) = self.parse_rest_element(&mut params)?;
@@ -4832,7 +4826,7 @@ where
             } else {
                 None
             };
-            let start_pos = self.look_ahead_position;
+            let start_pos = *self.look_ahead_position;
             let mut current = self.parse_conditional_expr()?;
             let curr_line = self.look_ahead_position.line;
             let start_line = start_pos.line;
@@ -4845,7 +4839,7 @@ where
                     if let Expr::Ident(ref ident) = arg {
                         if Self::is_strict_reserved(ident) {
                             return Err(Error::NonStrictFeatureInStrictContext(
-                                self.current_position,
+                                *self.current_position,
                                 "strict reserved word as an identifier".to_string(),
                             ));
                         }
@@ -4880,7 +4874,7 @@ where
                     let mut simple = true;
                     for arg in &params.params {
                         if self.context.strict && Self::check_arg_strict_mode(&arg.item) {
-                            return Err(Error::StrictModeArgumentsOrEval(self.current_position));
+                            return Err(Error::StrictModeArgumentsOrEval(*self.current_position));
                         }
                         if !Self::is_simple(&arg.item) {
                             simple = false;
@@ -4965,7 +4959,7 @@ where
             self.context.set_is_binding_element(false);
             AssignLeft::Expr(Box::new(start))
         } else if let Expr::Func(_) = &start {
-            return Err(Error::InvalidLHS(self.look_ahead_position));
+            return Err(Error::InvalidLHS(*self.look_ahead_position));
         } else if !Self::is_ident(&start) && Self::is_reinterpret_target(&start) {
             AssignLeft::Pat(self.reinterpret_expr_as_pat(start)?)
         } else {
@@ -5047,7 +5041,7 @@ where
         let mut formals_list = if let Expr::Ident(ref ident) = expr {
             if self.context.strict && Self::is_strict_reserved(ident) {
                 return Err(Error::NonStrictFeatureInStrictContext(
-                    self.current_position,
+                    *self.current_position,
                     "strict reserved word as an identifier".to_string(),
                 ));
             }
@@ -5101,7 +5095,7 @@ where
                                     } else {
                                         if self.context.strict {
                                             return Err(Error::NonStrictFeatureInStrictContext(
-                                                self.current_position,
+                                                *self.current_position,
                                                 "strict reserved word as an identifier".to_string(),
                                             ));
                                         }
@@ -5132,7 +5126,7 @@ where
                                     } else {
                                         if self.context.strict {
                                             return Err(Error::NonStrictFeatureInStrictContext(
-                                                self.current_position,
+                                                *self.current_position,
                                                 "strict reserved word as an identifier".to_string(),
                                             ));
                                         }
@@ -5634,7 +5628,7 @@ where
         if self.at_punct(Punct::DoubleAsterisk) {
             if let Expr::Unary(_) = expr {
                 return Err(Error::OperationError(
-                    self.look_ahead_position,
+                    *self.look_ahead_position,
                     "Unary operation cannot be the left hand side of an exponentiation expression."
                         .to_string(),
                 ));
@@ -5888,7 +5882,7 @@ where
     fn parse_left_hand_side_expr(&mut self) -> Res<Expr<'b>> {
         if !self.context.allow_in {
             return Err(Error::InvalidUseOfContextualKeyword(
-                self.current_position,
+                *self.current_position,
                 "in".to_string(),
             ));
         }
@@ -5951,7 +5945,7 @@ where
     /// scenarios
     #[tracing::instrument(level = "trace", skip(self))]
     fn parse_super(&mut self) -> Res<Expr<'b>> {
-        let super_position = self.look_ahead_position;
+        let super_position = *self.look_ahead_position;
         if !self.context.allow_super {
             log::trace!("super when not allowed");
             return Err(Error::InvalidSuper(super_position));
@@ -5976,7 +5970,7 @@ where
             "{}: parse_left_hand_side_expr_allow_call",
             self.look_ahead.span.start
         );
-        let start_pos = self.look_ahead_position;
+        let start_pos = *self.look_ahead_position;
         let is_async = self.at_contextual_keyword("async");
         let prev_in = self.context.allow_in;
         self.context.allow_in = true;
@@ -6005,7 +5999,7 @@ where
                 });
                 log::debug!(target: "look_ahead", "1 {:?}", expr);
             } else if self.at_punct(Punct::OpenParen) {
-                let current_pos = self.look_ahead_position;
+                let current_pos = *self.look_ahead_position;
                 let async_arrow = is_async && start_pos.line == current_pos.line;
                 self.context.set_is_binding_element(false);
                 self.context.set_is_assignment_target(false);
@@ -6099,7 +6093,7 @@ where
                 if self.at_punct(Punct::CloseParen) {
                     break;
                 }
-                let comma_position = self.look_ahead_position;
+                let comma_position = *self.look_ahead_position;
                 let comma = self.expect_comma_sep()?;
                 if let Some(last) = ret.last_mut() {
                     last.comma = Some(comma);
@@ -6335,15 +6329,8 @@ where
             self.context.has_line_term = comment_line_term || self.scanner.has_pending_new_line();
             if let Some(look_ahead) = self.scanner.next() {
                 let look_ahead = look_ahead?;
-                if cfg!(feature = "debug_look_ahead") {
-                    self._look_ahead = format!(
-                        "{:?}: {:?}",
-                        look_ahead.token,
-                        self.scanner.string_for(&look_ahead.span)
-                    );
-                    log::debug!("look_ahead: {:?}", self._look_ahead);
-                }
-                self.look_ahead_position = look_ahead.location.start;
+
+                *self.look_ahead_position = look_ahead.location.start;
                 if look_ahead.token.is_comment() {
                     log::trace!(
                         "next_item comment {} {:?}",
@@ -6358,13 +6345,15 @@ where
                         if self.context.is_module
                             && (inner.is_html() || inner.tail_content.is_some())
                         {
-                            return Err(Error::HtmlCommentInModule(self.look_ahead_position));
+                            return Err(Error::HtmlCommentInModule(*self.look_ahead_position));
                         }
                     }
                     self.comment_handler.handle_comment(look_ahead);
                     continue;
                 }
-                self.current_position = self.look_ahead_position;
+
+                self.current_position.clone_from(&self.look_ahead_position);
+                drop(*self.look_ahead_position);
 
                 return Ok(replace(&mut self.look_ahead, look_ahead));
             } else {
@@ -6422,7 +6411,7 @@ where
     fn expect_fat_arrow(&mut self) -> Res<Slice<'b>> {
         if self.look_ahead.token.matches_punct(Punct::EqualGreaterThan) {
             if self.context.has_line_term {
-                Err(Error::NewLineAfterFatArrow(self.look_ahead_position))
+                Err(Error::NewLineAfterFatArrow(*self.look_ahead_position))
             } else {
                 let item = self.next_item()?;
                 self.get_slice(&item)
@@ -6883,13 +6872,13 @@ where
         }
     }
     fn op_error(&self, msg: &str) -> Error {
-        Error::OperationError(self.current_position, msg.to_owned())
+        Error::OperationError(*self.current_position, msg.to_owned())
     }
     fn redecl_error(&self, name: &str) -> Error {
-        Error::Redecl(self.current_position, name.to_owned())
+        Error::Redecl(*self.current_position, name.to_owned())
     }
     fn reinterpret_error(&self, from: &str, to: &str) -> Error {
-        Error::UnableToReinterpret(self.current_position, from.to_owned(), to.to_owned())
+        Error::UnableToReinterpret(*self.current_position, from.to_owned(), to.to_owned())
     }
 
     pub fn next_position(&self) -> SourceLocation {
