@@ -1161,6 +1161,41 @@ fn class_ctor_scope() {
     .unwrap();
 }
 
+
+#[test]
+fn stack_oof() {
+    env_logger::builder().is_test(true).try_init().ok();
+    run_test(
+        r###"
+        (function() {  
+            var Choosealicense, 
+            LicenseSuggestion, 
+            bind = function(fn, me){ 
+                return function(){ 
+                    return fn.apply(me, arguments); 
+                }; 
+            };
+            Choosealicense = (function() {
+                Choosealicense.prototype.selectText = function(element) {
+                  var range, selection;
+        
+                  if (document.body.createTextRange) {
+        
+                  } else if (window.getSelection) {
+        
+                  }
+        
+                };
+        
+            });
+            
+            })()
+        "###,
+        false,
+    )
+    .unwrap();
+}
+
 #[test]
 fn import_default() {
     env_logger::builder().is_test(true).try_init().ok();
