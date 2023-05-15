@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-use ressa::Parser;
+use ressa_r::Parser;
 
 static USAGE: &str = "
 js_to_json

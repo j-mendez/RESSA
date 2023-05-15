@@ -24,7 +24,7 @@ this means that you can evaluate your JS in pieces from top to bottom.
 
 ```rust
 use resast::prelude::*;
-use ressa::*;
+use ressa_r::*;
 
 fn main() {
     let js = "function helloWorld() { alert('Hello world'); }";
@@ -52,7 +52,7 @@ Another way to interact with a `Parser` would be to utilize the `parse` method. 
 ### Parse Example
 
 ```rust
-use ressa::{
+use ressa_r::{
     Parser,
 };
 use resast::ref_tree::prelude::*;

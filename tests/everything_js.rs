@@ -2,7 +2,7 @@ mod libs_common;
 use env_logger;
 use libs_common::{get_js_file, EverythingVersion, Lib};
 
-use ressa::Parser;
+use ressa_r::Parser;
 #[test]
 fn es5() {
     let _ = env_logger::builder().is_test(true).try_init().ok();
@@ -32,7 +32,7 @@ fn es2015_module() {
     let _ = env_logger::builder().is_test(true).try_init().ok();
     let path = Lib::Everything(EverythingVersion::Es2015Module).path();
     let js = get_js_file(&path).expect(&format!("Failed to get {:?}", path));
-    let mut p = ressa::spanned::Parser::builder()
+    let mut p = ressa_r::spanned::Parser::builder()
         .module(true)
         .js(&js)
         .build()

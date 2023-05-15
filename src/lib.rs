@@ -12,7 +12,7 @@
 //!
 //! A very simple example might look like this
 //! ```
-//! use ressa::Parser;
+//! use ressa_r::Parser;
 //! use resast::prelude::*;
 //! fn main() {
 //!     let js = "function helloWorld() { alert('Hello world'); }";
@@ -312,8 +312,8 @@ where
     /// Wrapper around the `Iterator` implementation for
     /// Parser
     /// ```
-    /// extern crate ressa;
-    /// use ressa::Parser;
+    /// extern crate ressa_r;
+    /// use ressa_r::Parser;
     /// use resast::prelude::*;
     /// fn main() {
     ///     let js = "function helloWorld() { alert('Hello world'); }";

@@ -1,6 +1,6 @@
-extern crate ressa;
+extern crate ressa_r;
 
-use ressa::Parser;
+use ressa_r::Parser;
 
 fn main() {
     let _ = env_logger::try_init();

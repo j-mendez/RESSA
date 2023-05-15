@@ -15,7 +15,7 @@
 //! and a naive comparison against
 //! [esprima](https://github.com/jquery/esprima)
 extern crate ress;
-extern crate ressa;
+extern crate ressa_r;
 // extern crate test;
 #[macro_use]
 extern crate lazy_static;
@@ -26,7 +26,7 @@ extern crate criterion;
 use std::{fs::read_to_string, path::PathBuf};
 
 use criterion::{black_box, Criterion};
-use ressa::spanned::Parser;
+use ressa_r::spanned::Parser;
 
 lazy_static! {
     static ref NG: String = get_js(Lib::Angular).unwrap();
@@ -122,7 +122,7 @@ fn bench(c: &mut Criterion, js: &str, name: &'static str, module: bool) {
     });
 }
 
-fn format_error(js: &str, e: &ressa::Error) -> Option<String> {
+fn format_error(js: &str, e: &ressa_r::Error) -> Option<String> {
     let pos = e.position()?;
     let line_count = js.lines().count();
     if line_count < 5 {

@@ -1,5 +1,5 @@
-extern crate ressa;
-use ressa::*;
+extern crate ressa_r;
+use ressa_r::*;
 fn main() {
     let js = include_str!("simple.mjs");
     let mut p = Parser::builder()

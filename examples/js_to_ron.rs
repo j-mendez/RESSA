@@ -1,5 +1,5 @@
-extern crate ressa;
-use ressa::*;
+extern crate ressa_r;
+use ressa_r::*;
 
 fn main() {
     let _ = env_logger::try_init();

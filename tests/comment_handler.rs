@@ -16,7 +16,7 @@ function trimString(s) {
             docs.push(comment.to_string())
         }
     };
-    let _ = ressa::Parser::builder()
+    let _ = ressa_r::Parser::builder()
         .js(js)
         .with_comment_handler(ch)
         .expect("failed to create parser")
@@ -55,7 +55,7 @@ function trimString(s) {
             docs.push(comment.to_string())
         }
     };
-    let _ = ressa::Parser::builder()
+    let _ = ressa_r::Parser::builder()
         .js(js)
         .with_comment_handler(ch)
         .expect("failed to create parser")
@@ -80,7 +80,7 @@ function trimString(s) {
 
 #[test]
 fn comment_handler3() {
-    use ressa::CommentHandler;
+    use ressa_r::CommentHandler;
     #[derive(Clone)]
     struct Ch {
         pub comments: Vec<(SourceLocation, String)>,
@@ -115,7 +115,7 @@ function trimString(s) {
     return trimStringInner(s);
 }";
     let ch = Ch::new();
-    let mut p = ressa::Parser::builder()
+    let mut p = ressa_r::Parser::builder()
         .js(js)
         .with_comment_handler(ch)
         .expect("failed to create parser");

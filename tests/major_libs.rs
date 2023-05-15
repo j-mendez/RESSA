@@ -1,6 +1,6 @@
 #![cfg(test)]
 use env_logger;
-use ressa::Parser;
+use ressa_r::Parser;
 
 mod libs_common;
 
@@ -72,7 +72,7 @@ fn run_test(name: &str, normal: String, min: String) {
 }
 
 fn handle_result<'a>(
-    result: Result<resast::Program<'a>, ressa::Error>,
+    result: Result<resast::Program<'a>, ressa_r::Error>,
     name: &str,
 ) -> resast::Program<'a> {
     match result {

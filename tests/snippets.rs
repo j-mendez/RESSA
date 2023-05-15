@@ -1,5 +1,5 @@
 use resast::prelude::*;
-use ressa::*;
+use ressa_r::*;
 use std::borrow::Cow;
 #[test]
 fn doc1() {
@@ -71,7 +71,7 @@ yield;
 ";
     let mut parser = Parser::new(js).expect("failed to create parser");
     let expect = parser.parse();
-    if let Err(ressa::Error::NonStrictFeatureInStrictContext(_, _)) = expect {
+    if let Err(ressa_r::Error::NonStrictFeatureInStrictContext(_, _)) = expect {
         ()
     } else {
         panic!("Incorrectly parsed reserved word as identifier");
@@ -84,7 +84,7 @@ fn new_line_in_fat_arrow() {
 => x;";
     let mut parser = Parser::new(js).expect("failed to create parser");
     let expect = parser.parse();
-    if let Err(ressa::Error::NewLineAfterFatArrow(_)) = expect {
+    if let Err(ressa_r::Error::NewLineAfterFatArrow(_)) = expect {
         ()
     } else {
         panic!(
@@ -101,7 +101,7 @@ fn arguments_as_param_arrow() {
 var x = arguments => arguments;";
     let mut parser = Parser::new(js).expect("failed to create parser");
     let expect = parser.parse();
-    if let Err(ressa::Error::StrictModeArgumentsOrEval(_)) = expect {
+    if let Err(ressa_r::Error::StrictModeArgumentsOrEval(_)) = expect {
         ()
     } else {
         panic!("Incorrectly parsed arguments as param in strict mode");
@@ -117,7 +117,7 @@ __proto__: Number,
 });";
     let mut parser = Parser::new(js).expect("failed to create parser");
     let expect = parser.parse();
-    if let Err(ressa::Error::Redecl(_, _)) = expect {
+    if let Err(ressa_r::Error::Redecl(_, _)) = expect {
         ()
     } else {
         panic!(
@@ -1235,7 +1235,7 @@ fn obj_expr_stmt() {
         stmt::Stmt,
         Program, ProgramPart, Slice, SourceLocation,
     };
-    use ressa::spanned::Parser;
+    use ressa_r::spanned::Parser;
     env_logger::builder().is_test(true).try_init().ok();
     let mut p = Parser::builder().js("({});").build().unwrap();
     let tokens = p.parse().unwrap();
@@ -1308,7 +1308,7 @@ fn blow_the_stack() {
 #[test]
 #[ignore = "Diagnostic to see how badly our recursive decent is performing"]
 fn blow_the_stack_spanned() {
-    use ressa::spanned::Parser;
+    use ressa_r::spanned::Parser;
     env_logger::builder().is_test(true).try_init().ok();
     fn do_it(ct: usize) {
         eprintln!("do_it {}", ct);
@@ -1328,15 +1328,15 @@ fn blow_the_stack_spanned() {
     }
 }
 
-fn run_test(js: &str, as_mod: bool) -> Result<(), ressa::Error> {
+fn run_test(js: &str, as_mod: bool) -> Result<(), ressa_r::Error> {
     env_logger::builder().is_test(true).try_init().ok();
     let mut p = Parser::builder().js(js).module(as_mod).build()?;
     p.parse()?;
     Ok(())
 }
 
-fn run_spanned_test<'a>(js: &'a str, as_mod: bool) -> Result<(), ressa::Error> {
-    use ressa::spanned::Parser;
+fn run_spanned_test<'a>(js: &'a str, as_mod: bool) -> Result<(), ressa_r::Error> {
+    use ressa_r::spanned::Parser;
     env_logger::builder().is_test(true).try_init().ok();
     let mut p = Parser::builder().js(js).module(as_mod).build()?;
     p.parse()?;
